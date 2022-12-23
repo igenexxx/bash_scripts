@@ -1,0 +1,303 @@
+#!/usr/bin/env bash
+
+baseDir=$(dirname "$0")
+eslint=false
+prettier=false
+jest=false
+lintStaged=false
+husky=false
+
+# Check dependencies
+checkDependencies() {
+  for cmd in "$@"; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      echo "Error: $cmd is not installed." >&2
+      exit 1
+    fi
+  done
+}
+
+# TODO: add module type
+
+usage() {
+  echo "Usage: node-ts-init
+                    [ -e[path]  | --eslint[path]]       - enable eslint with optional path to config file
+                    [ -p[path]  | --prettier[path] ]    - enable prettier with optional path to config file
+                    [ -j[path]  | --jest[path] ]        - enable jest with optional path to config file
+                    [ -hu[path] | --husky[path] ]       - enable husky with optional path to config file
+                    [ -l[path]  | --lint-staged[path] ] - enable lint-staged with optional path to config file
+                    [ -h ] --help                       - display help
+                    targetPath                          - path to the target directory"
+  exit 2
+}
+
+confirm() {
+  echo "$1"
+  select yn in "Yes" "No"; do
+    case $yn in
+    Yes) break ;;
+    No) exit ;;
+    esac
+  done
+}
+
+checkDependencies git node npm jq
+
+ARGUMENT_LIST=(
+  "eslint"
+  "prettier"
+  "jest"
+  "help"
+  "hu"
+  "husky"
+)
+
+#FLAGS=$(echo "${ARGUMENT_LIST[@]}" | xargs -n1 | cut -c1 | xargs | sed 's/ /::,/g')::
+
+PARSED_ARGUMENTS=$(getopt -a \
+  --name "$(basename "$0")" \
+  --options "e::,p::,j::,l::,h" \
+  --longoptions "$(printf "%s::," "${ARGUMENT_LIST[@]}")" \
+  -- "$@")
+
+VALID_ARGUMENTS=$?
+
+if [ "$VALID_ARGUMENTS" != "0" ]; then
+  usage
+fi
+
+eval set --"$PARSED_ARGUMENTS"
+
+TARGET_PATH=$(echo "$PARSED_ARGUMENTS" | sed 's/ -- /;/' | cut -d";" -f2 | tr -d "'")
+
+if [[ -z "$TARGET_PATH" ]]; then
+  usage
+fi
+
+if [[ $# -eq 2 ]]; then
+  eslint=true
+  prettier=true
+  jest=true
+  husky=true
+fi
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+  -e | --eslint)
+    eslint=${2:-true}
+    shift 2
+    ;;
+  -p | --prettier)
+    prettier=${2:-true}
+    shift 2
+    ;;
+  -j | --jest)
+    jest=${2:-true}
+    shift 2
+    ;;
+  --hu | --husky)
+    husky=${2:-true}
+    shift 2
+    ;;
+  -h | --help)
+    usage
+    ;;
+  *)
+    break
+    ;;
+  esac
+done
+
+echo "baseDir: $baseDir"
+
+exit 1
+
+TARGET_PATH=$(echo "$PARSED_ARGUMENTS" | sed 's/ -- /;/' | cut -d";" -f2 | tr -d "'")
+
+if [[ ! -d $TARGET_PATH ]]; then
+  echo "Path: $TARGET_PATH not found."
+  echo -n "Do you want to create it? [y/N]"
+  read -r answer
+  if [[ $answer =~ ^([yY][eE][sS]|[yY])$ ]]; then
+    mkdir -p "$TARGET_PATH" && cd "$TARGET_PATH" || exit
+  else
+    exit 1
+  fi
+fi
+
+## Initiate git
+git init
+
+## Initiate npm
+npm init -y
+
+## Install required dependencies
+npm install -D typescript ts-node nodemon @types/node
+
+## Install optional dependencies
+if [[ $eslint ]]; then
+
+  npm install -D eslint eslint eslint-config-prettier eslint-plugin-import eslint-plugin-node eslint-plugin-prefer-arrow eslint-plugin-prettier \
+eslint-plugin-simple-import-sort eslint-plugin-unused-imports \
+@typescript-eslint/eslint-plugin @typescript-eslint/parser
+fi
+
+if [[ $prettier ]]; then
+  npm install -D prettier
+fi
+
+if [[ $jest ]]; then
+  npm install -D jest ts-jest jest-mock-extended @types/jest
+fi
+
+if [[ $husky ]]; then
+  npm install -D husky lint-staged
+fi
+
+## Initiate tsconfig.json
+tsc --init \
+--target es2022 \
+--lib es2022 \
+--experimentalDecorators \
+--emitDecoratorMetadata \
+--module nodenext \
+--rootDir src \
+--outDir dist \
+--moduleResolution node \
+--types node,jest \
+--sourceMap \
+--esModuleInterop \
+--forceConsistentCasingInFileNames \
+--strict \
+--skipLibCheck
+
+## Initialize husky
+if [[ $husky ]]; then
+  npx husky install
+  npx husky add .husky/pre-commit "npm run lint:fix"
+fi
+
+# Setup configs
+
+## Update package.json
+jq '.scripts = {
+  "start:watch": "nodemon --watch src --exec ts-node src/index.ts",
+  "start:inspect": "nodemon --inspect-brk src/index.ts",
+  "build": "tsc",
+  "lint": "eslint --ext .ts src",
+  "lint:fix": "lint-staged",
+  "test": "jest"
+}' package.json | sponge package.json
+
+## Configure gitignore
+cat <<EOF >.gitignore
+/node_modules
+.idea/
+build/
+.env
+EOF
+
+## Configure ts-node
+jq '. + { "ts-node": { "compilerOptions": { "module": "NodeNext", "lib": ["ESNext"] } }, "files": true }' tsconfig.json | Sponge tsconfig.json
+
+## Configure nodemon
+cat <<EOF > nodemon.json
+{
+  "watch": ["src"],
+  "ext": "ts",
+  "ignore": ["src/**/*.spec.ts"],
+  "exec": "ts-node src/index.ts",
+  "execMap": {
+    "ts": "node --loader ts-node/esm"
+  }
+}
+EOF
+
+## Configure lint-staged
+if [[ $husky ]]; then
+cat <<EOF > .lintstagedrc
+{
+  "*.{js,ts}": ["eslint --fix", "prettier --write"]
+}
+EOF
+fi
+
+## Configure eslint
+if [[ $eslint ]]; then
+  if [[ -f $baseDir/node/assets/.eslintrc ]]; then
+    cp "$baseDir/node/assets/.eslintrc" .eslintrc
+  else
+cat <<EOF > .eslintrc
+{
+  "extends": ["eslint:recommended", "plugin:@typescript-eslint/recommended", "prettier"],
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "plugins": ["@typescript-eslint", "simple-import-sort", "unused-imports"],
+  "rules": {
+    "no-unused-vars": "off",
+    "unused-imports/no-unused-imports": "error",
+    "unused-imports/no-unused-vars": [
+      "warn",
+      {
+        "vars": "all",
+        "varsIgnorePattern": "^_",
+        "args": "after-used",
+        "argsIgnorePattern": "^_"
+      }
+    ],
+    "simple-import-sort/imports": "error",
+    "simple-import-sort/exports": "error",
+    "import/order": "off",
+    "import/newline-after-import": "error",
+    "import/no-duplicates": "error",
+    "prettier/prettier": "error"
+  },
+  "overrides": [
+    {
+      "files": ["*.spec.ts"],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off"
+      }
+    }
+  ]
+}
+EOF
+  fi
+
+cat <<EOF > .eslintignore
+node_modules
+dist
+EOF
+fi
+
+## Configure prettier
+if [[ $prettier ]]; then
+cat <<EOF > .prettierrc
+{
+  "printWidth": 120,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "bracketSpacing": true,
+  "arrowParens": "always",
+  "endOfLine": "lf"
+}
+EOF
+fi
+
+## Configure jest
+if [[ $jest ]]; then
+cat <<EOF > jest.config.json
+{
+  "preset": "ts-jest",
+  "testEnvironment": "node",
+  "setupFiles": ["dotenv/config"],
+  "testTimeout": 5000
+}
+EOF
+fi

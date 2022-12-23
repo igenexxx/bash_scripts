@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+usage()
+{
+  echo "Usage: wtf [ -n | --name ] filename"
+  exit 2
+}
+
+PARSED_ARGUMENTS=$(getopt -a -n alphabet -o abc:d: --long name: -- "$@")
+
+echo "$PARSED_ARGUMENTS"
