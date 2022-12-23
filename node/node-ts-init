@@ -4,7 +4,6 @@ baseDir=$(dirname "$0")
 eslint=false
 prettier=false
 jest=false
-lintStaged=false
 husky=false
 
 # Check dependencies
@@ -108,10 +107,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo "baseDir: $baseDir"
-
-exit 1
-
 TARGET_PATH=$(echo "$PARSED_ARGUMENTS" | sed 's/ -- /;/' | cut -d";" -f2 | tr -d "'")
 
 if [[ ! -d $TARGET_PATH ]]; then
@@ -126,35 +121,42 @@ if [[ ! -d $TARGET_PATH ]]; then
 fi
 
 ## Initiate git
+echo "Initiating git"
 git init
 
 ## Initiate npm
+echo "Initiating npm"
 npm init -y
 
 ## Install required dependencies
+echo "Installing required dependencies"
 npm install -D typescript ts-node nodemon @types/node
 
 ## Install optional dependencies
 if [[ $eslint ]]; then
-
+  echo "Installing eslint"
   npm install -D eslint eslint eslint-config-prettier eslint-plugin-import eslint-plugin-node eslint-plugin-prefer-arrow eslint-plugin-prettier \
 eslint-plugin-simple-import-sort eslint-plugin-unused-imports \
 @typescript-eslint/eslint-plugin @typescript-eslint/parser
 fi
 
 if [[ $prettier ]]; then
+  echo "Installing prettier"
   npm install -D prettier
 fi
 
 if [[ $jest ]]; then
+  echo "Installing jest"
   npm install -D jest ts-jest jest-mock-extended @types/jest
 fi
 
 if [[ $husky ]]; then
+  echo "Installing husky"
   npm install -D husky lint-staged
 fi
 
 ## Initiate tsconfig.json
+echo "Initiating tsconfig.json"
 tsc --init \
 --target es2022 \
 --lib es2022 \
@@ -173,6 +175,7 @@ tsc --init \
 
 ## Initialize husky
 if [[ $husky ]]; then
+  echo "Initializing husky"
   npx husky install
   npx husky add .husky/pre-commit "npm run lint:fix"
 fi
@@ -180,6 +183,7 @@ fi
 # Setup configs
 
 ## Update package.json
+echo "Updating package.json"
 jq '.scripts = {
   "start:watch": "nodemon --watch src --exec ts-node src/index.ts",
   "start:inspect": "nodemon --inspect-brk src/index.ts",
@@ -190,6 +194,7 @@ jq '.scripts = {
 }' package.json | sponge package.json
 
 ## Configure gitignore
+echo "Configuring gitignore"
 cat <<EOF >.gitignore
 /node_modules
 .idea/
@@ -198,9 +203,11 @@ build/
 EOF
 
 ## Configure ts-node
-jq '. + { "ts-node": { "compilerOptions": { "module": "NodeNext", "lib": ["ESNext"] } }, "files": true }' tsconfig.json | Sponge tsconfig.json
+echo "Configuring ts-node"
+jq '. + { "ts-node": { "compilerOptions": { "module": "NodeNext", "lib": ["ESNext"] } }, "files": true }' tsconfig.json | sponge tsconfig.json
 
 ## Configure nodemon
+echo "Configuring nodemon"
 cat <<EOF > nodemon.json
 {
   "watch": ["src"],
@@ -215,6 +222,7 @@ EOF
 
 ## Configure lint-staged
 if [[ $husky ]]; then
+  echo "Configuring lint-staged"
 cat <<EOF > .lintstagedrc
 {
   "*.{js,ts}": ["eslint --fix", "prettier --write"]
@@ -224,9 +232,12 @@ fi
 
 ## Configure eslint
 if [[ $eslint ]]; then
+  echo "Configuring eslint"
   if [[ -f $baseDir/node/assets/.eslintrc ]]; then
+    echo "Copying .eslintrc"
     cp "$baseDir/node/assets/.eslintrc" .eslintrc
   else
+    echo "Creating .eslintrc"
 cat <<EOF > .eslintrc
 {
   "extends": ["eslint:recommended", "plugin:@typescript-eslint/recommended", "prettier"],
@@ -267,6 +278,7 @@ cat <<EOF > .eslintrc
 EOF
   fi
 
+echo "Creating .eslintignore"
 cat <<EOF > .eslintignore
 node_modules
 dist
@@ -275,6 +287,7 @@ fi
 
 ## Configure prettier
 if [[ $prettier ]]; then
+  echo "Configuring prettier"
 cat <<EOF > .prettierrc
 {
   "printWidth": 120,
@@ -292,6 +305,7 @@ fi
 
 ## Configure jest
 if [[ $jest ]]; then
+  echo "Configuring jest"
 cat <<EOF > jest.config.json
 {
   "preset": "ts-jest",
