@@ -119,9 +119,9 @@ fi
 
 ## Create files
 echo "Creating files..."
-mkdir -p "$TARGET_PATH/src"
-mkdir -p "$TARGET_PATH/dist"
-touch "$TARGET_PATH/src/index.ts"
+mkdir src
+mkdir dist
+touch src/index.ts
 
 ## Initiate git
 echo "Initiating git"
