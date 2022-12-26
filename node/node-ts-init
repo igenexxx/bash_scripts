@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 baseDir=$(dirname "$0")
-eslint=false
-prettier=false
-jest=false
-husky=false
+eslint=true
+prettier=true
+jest=true
+husky=true
 
 # Check dependencies
 checkDependencies() {
@@ -60,7 +60,6 @@ PARSED_ARGUMENTS=$(getopt -a \
   -- "$@")
 
 VALID_ARGUMENTS=$?
-
 if [ "$VALID_ARGUMENTS" != "0" ]; then
   usage
 fi
@@ -73,11 +72,11 @@ if [[ -z "$TARGET_PATH" ]]; then
   usage
 fi
 
-if [[ $# -eq 2 ]]; then
-  eslint=true
-  prettier=true
-  jest=true
-  husky=true
+if (( $# > 2 )); then
+  eslint=false
+  prettier=false
+  jest=false
+  husky=false
 fi
 
 while [[ $# -gt 0 ]]; do
@@ -107,8 +106,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-TARGET_PATH=$(echo "$PARSED_ARGUMENTS" | sed 's/ -- /;/' | cut -d";" -f2 | tr -d "'")
-
 if [[ ! -d $TARGET_PATH ]]; then
   echo "Path: $TARGET_PATH not found."
   echo -n "Do you want to create it? [y/N]"
@@ -119,6 +116,12 @@ if [[ ! -d $TARGET_PATH ]]; then
     exit 1
   fi
 fi
+
+## Create files
+echo "Creating files..."
+mkdir -p "$TARGET_PATH/src"
+mkdir -p "$TARGET_PATH/dist"
+touch "$TARGET_PATH/src/index.ts"
 
 ## Initiate git
 echo "Initiating git"
