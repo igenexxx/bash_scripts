@@ -207,6 +207,8 @@ EOF
 
 ## Configure ts-node
 echo "Configuring ts-node"
+sed -Ei '/^(\s+(\/\/|\/\*)|$)/d' tsconfig.json
+sed -Ei 's/\s+\/.*//g' tsconfig.json
 jq '. + { "ts-node": { "compilerOptions": { "module": "NodeNext", "lib": ["ESNext"] } }, "files": true }' tsconfig.json | sponge tsconfig.json
 
 ## Configure nodemon
